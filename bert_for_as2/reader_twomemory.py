@@ -36,82 +36,34 @@ class InputFeatures(object):
 
     def __init__(self,
                  qas_id,
-                 tokens,
-                 input_ids,
-                 input_mask,
-                 segment_ids,
-                 wn_concept_ids,
-                 nell_concept_ids,
+                 q_tokens,
+                 q_input_ids,
+                 q_input_mask,
+                 q_segment_ids,
+                 q_pos_ids,
+                 a_tokens,
+                 a_input_ids,
+                 a_input_mask,
+                 a_segment_ids,
+                 a_pos_ids,
                  label):
         self.qas_id = qas_id
-        self.tokens = tokens
-        self.input_ids = input_ids
-        self.input_mask = input_mask
-        self.segment_ids = segment_ids
-        self.wn_concept_ids = wn_concept_ids
-        self.nell_concept_ids = nell_concept_ids
+        self.q_tokens = q_tokens
+        self.q_input_ids = q_input_ids
+        self.q_input_mask = q_input_mask
+        self.q_segment_ids = q_segment_ids
+        self.q_pos_ids = q_pos_ids
+        self.a_tokens = a_tokens
+        self.a_input_ids = a_input_ids
+        self.a_input_mask = a_input_mask
+        self.a_segment_ids = a_segment_ids
+        self.a_pos_ids = a_pos_ids
         self.label = label
 
 
 class Examples_To_Features_Converter(object):
     def __init__(self, **concept_settings):
-        self.concept_settings = concept_settings
-
-        # load necessary data files for mapping to related concepts
-        # 1. mapping from subword-level tokenization to word-level tokenization
-        tokenization_filepath = self.concept_settings['tokenization_path']
-        assert os.path.exists(tokenization_filepath)
-        self.all_tokenization_info = {}
-        for item in pickle.load(open(tokenization_filepath, 'rb')):
-            self.all_tokenization_info[item['id']] = item
-
-        # 2. mapping from concept name to concept id (currently only support one KB)
-        self.wn_concept2id = self.concept_settings['wn_concept2id']
-        self.nell_concept2id = self.concept_settings['nell_concept2id']
-
-        # 3. retrieved related wordnet concepts (if use_wordnet)
-        if concept_settings['use_wordnet']:
-            retrieved_synset_filepath = self.concept_settings['retrieved_synset_path']
-            assert os.path.exists(retrieved_synset_filepath)
-            self.synsets_info = pickle.load(open(retrieved_synset_filepath, 'rb'))  # token to sysnet names
-            self.max_wn_concept_length = max([len(synsets) for synsets in self.synsets_info.values()])
-
-        # 4. retrieved related nell concepts (if use_nell)
-        if concept_settings['use_nell']:
-            retrieved_nell_concept_filepath = self.concept_settings['retrieved_nell_concept_path']
-            assert os.path.exists(retrieved_nell_concept_filepath)
-            self.nell_retrieve_info = {}
-            for item in pickle.load(open(retrieved_nell_concept_filepath, 'rb')):
-                self.nell_retrieve_info[item['id']] = item
-            self.max_nell_concept_length = max([max([len(entity_info['retrieved_concepts']) for entity_info in
-                                                     item['question_entities'] + item['answer_entities']])
-                                                for qid, item in self.nell_retrieve_info.items() if
-                                                len(item['question_entities'] + item['answer_entities']) > 0])
-
-    def _lookup_wordnet_concept_ids(self, sub_tokens, sub_to_ori_index, tokens, tolower, tokenizer):
-        concept_ids = []
-        for index in range(len(sub_tokens)):
-            original_token = tokens[sub_to_ori_index[index]]
-            # if tokens are in upper case, we must lower it for retrieving
-            retrieve_token = tokenizer.basic_tokenizer._run_strip_accents(
-                original_token.lower()) if tolower else original_token
-            if retrieve_token in self.synsets_info:
-                concept_ids.append(
-                    [self.wn_concept2id[synset_name] for synset_name in self.synsets_info[retrieve_token]])
-            else:
-                concept_ids.append([])
-        return concept_ids
-
-    def _lookup_nell_concept_ids(self, sub_tokens, sub_to_ori_index, tokens, nell_info):
-        original_concept_ids = [[] for _ in range(len(tokens))]
-        for entity_info in nell_info:
-            for pos in range(entity_info['token_start'], entity_info['token_end'] + 1):
-                original_concept_ids[pos] += [self.nell_concept2id[category_name] for category_name in
-                                              entity_info['retrieved_concepts']]
-        for pos in range(len(original_concept_ids)):
-            original_concept_ids[pos] = list(set(original_concept_ids[pos]))
-        concept_ids = [original_concept_ids[sub_to_ori_index[index]] for index in range(len(sub_tokens))]
-        return concept_ids
+        pass
 
     def __call__(self,
                  examples,
@@ -125,101 +77,74 @@ class Examples_To_Features_Converter(object):
 
             question_tokens = tokenizer.tokenize(example.question_text)
             assert question_tokens == tokenization_info['question_subtokens']
-            if self.concept_settings['use_wordnet']:
-                question_wn_concepts = self._lookup_wordnet_concept_ids(question_tokens,
-                                                                     tokenization_info['question_sub_to_ori_index'],
-                                                                     tokenization_info['question_tokens'],
-                                                                     tolower=tokenizer.basic_tokenizer.do_lower_case == False,
-                                                                     tokenizer=tokenizer)  # if tolower is True, tokenizer must be given
-            if self.concept_settings['use_nell']:
-                question_nell_concepts = self._lookup_nell_concept_ids(question_tokens,
-                                                                    tokenization_info['question_sub_to_ori_index'],
-                                                                    tokenization_info['question_tokens'],
-                                                                    self.nell_retrieve_info[example.id][
-                                                                        'question_entities'])
+
             if len(question_tokens) > max_question_length:
                 question_tokens = question_tokens[0:max_question_length]
-                question_wn_concepts = question_wn_concepts[0:max_question_length]
-                question_nell_concepts = question_nell_concepts[0:max_question_length]
 
             answer_tokens = tokenizer.tokenize(example.answer_text)
             assert answer_tokens == tokenization_info['answer_subtokens']
-            if self.concept_settings['use_wordnet']:
-                answer_wn_concepts = self._lookup_wordnet_concept_ids(answer_tokens,
-                                                                        tokenization_info['answer_sub_to_ori_index'],
-                                                                        tokenization_info['answer_tokens'],
-                                                                        tolower=tokenizer.basic_tokenizer.do_lower_case == False,
-                                                                        tokenizer=tokenizer)  # if tolower is True, tokenizer must be given
-            if self.concept_settings['use_nell']:
-                answer_nell_concepts = self._lookup_nell_concept_ids(answer_tokens,
-                                                                       tokenization_info['answer_sub_to_ori_index'],
-                                                                       tokenization_info['answer_tokens'],
-                                                                       self.nell_retrieve_info[example.id][
-                                                                           'answer_entities'])
+
             if len(answer_tokens) > max_answer_length:
                 answer_tokens = answer_tokens[0:max_answer_length]
-                answer_wn_concepts = answer_wn_concepts[0:max_answer_length]
-                answer_nell_concepts = answer_nell_concepts[0:max_answer_length]
 
-            tokens = []
-            segment_ids = []
-            wn_concept_ids = []
-            nell_concept_ids = []
 
-            tokens.append("[CLS]")
-            segment_ids.append(0)
-            wn_concept_ids.append([])
-            nell_concept_ids.append([])
+            q_tokens = []
+            q_segment_ids = []
 
-            for token, question_wn_concept, question_nell_concept in  zip(question_tokens, question_wn_concepts, question_nell_concepts):
+            q_tokens.append("[CLS]")
+            q_segment_ids.append(0)
+
+            for token in  question_tokens:
                 tokens.append(token)
                 segment_ids.append(0)
-                wn_concept_ids.append(question_wn_concept)
-                nell_concept_ids.append(question_nell_concept)
 
             tokens.append("[SEP]")
             segment_ids.append(0)
-            wn_concept_ids.append([])
-            nell_concept_ids.append([])
 
-            for token, answer_wn_concept, answer_nell_concept in zip(answer_tokens, answer_wn_concepts,
-                                                                         answer_nell_concepts):
+            a_tokens = []
+            a_segment_ids = []
+
+            a_tokens.append("[CLS]")
+            a_segment_ids.append(0)
+
+            for token in answer_tokens:
                 tokens.append(token)
-                segment_ids.append(1)
-                wn_concept_ids.append(answer_wn_concept)
-                nell_concept_ids.append(answer_nell_concept)
+                segment_ids.append(0)
+
 
             tokens.append("[SEP]")
-            segment_ids.append(1)
-            wn_concept_ids.append([])
-            nell_concept_ids.append([])
+            segment_ids.append(0)
 
-            input_mask = [1] * len(tokens)
 
-            while len(tokens) < max_seq_length:
-                tokens.append("[PAD]")
-                segment_ids.append(1)
-                wn_concept_ids.append([])
-                nell_concept_ids.append([])
-                input_mask.append(0)
+            q_input_mask = [1] * len(q_tokens)
+            a_input_mask = [1] * len(a_tokens)
 
-            input_ids = tokenizer.convert_tokens_to_ids(tokens)
+            while len(q_tokens) < max_question_length:
+                q_tokens.append("[PAD]")
+                q_segment_ids.append(0)
+                q_input_mask.append(0)
 
-            for concept_ids, max_concept_length in zip((wn_concept_ids, nell_concept_ids),
-                                                       (self.max_wn_concept_length, self.max_nell_concept_length)):
-                for cindex in range(len(concept_ids)):
-                    concept_ids[cindex] = concept_ids[cindex] + [0] * (max_concept_length - len(concept_ids[cindex]))
-                    concept_ids[cindex] = concept_ids[cindex][:max_concept_length]
-                assert all([len(id_list) == max_concept_length for id_list in concept_ids])
+            while len(a_tokens) < max_answer_length:
+                a_tokens.append("[PAD]")
+                a_segment_ids.append(0)
+                a_input_mask.append(0)
+
+            q_input_ids = tokenizer.convert_tokens_to_ids(q_tokens)
+            a_input_ids = tokenizer.convert_tokens_to_ids(a_tokens)
+
 
             feature = InputFeatures(
                 qas_id=example.id,
-                tokens=tokens,
-                input_ids=input_ids,
-                input_mask=input_mask,
-                segment_ids=segment_ids,
-                wn_concept_ids=wn_concept_ids,
-                nell_concept_ids=nell_concept_ids,
+                q_tokens=q_tokens,
+                q_input_ids=q_input_ids,
+                q_input_mask=q_input_mask,
+                q_segment_ids=q_segment_ids,
+                q_pos_ids=range(max_question_length),
+                a_tokens=q_tokens,
+                a_input_ids=q_input_ids,
+                a_input_mask=q_input_mask,
+                a_segment_ids=q_segment_ids,
+                a_pos_ids=range(max_answer_length),
                 label=example.label)
 
             yield feature
@@ -285,30 +210,36 @@ class DataProcessor(object):
                 "Unknown phase, which should be in ['train', 'predict'].")
         
         def batch_reader(features, batch_size):
-            batch,input_ids,token_type_ids,attention_mask,wn_concept_ids,nell_concept_ids,label = [],[],[],[],[],[],[]
+            batch,q_input_ids,q_token_type_ids,q_attention_mask,q_position_ids,a_input_ids,a_token_type_ids,a_attention_mask,a_position_ids,label = [],[],[],[],[],[],[],[],[],[]
             batch_data = {}
             for (index, feature) in enumerate(features):
-                input_ids.append(feature.input_ids)
-                token_type_ids.append(feature.segment_ids)
-                attention_mask.append(feature.input_mask)
-                wn_concept_ids.append(feature.wn_concept_ids)
-                nell_concept_ids.append(feature.nell_concept_ids)
+                q_input_ids.append(feature.q_input_ids)
+                q_token_type_ids.append(feature.q_segment_ids)
+                q_attention_mask.append(feature.q_input_mask)
+                q_position_ids.append(feature.q_pos_ids)
+                a_input_ids.append(feature.a_input_ids)
+                a_token_type_ids.append(feature.a_segment_ids)
+                a_attention_mask.append(feature.a_input_mask)
+                a_position_ids.append(feature.a_pos_ids)
                 label.append(feature.label)
 
-                to_append = len(input_ids) < batch_size
+                to_append = len(q_input_ids) < batch_size
 
                 if to_append:
                     continue
                 else:
-                    batch_data["input_ids"] = input_ids
-                    batch_data["token_type_ids"] = token_type_ids
-                    batch_data["attention_mask"] = attention_mask
-                    batch_data["wn_concept_ids"] = wn_concept_ids
-                    batch_data["nell_concept_ids"] = nell_concept_ids
+                    batch_data["q_input_ids"] = q_input_ids
+                    batch_data["q_token_type_ids"] = q_token_type_ids
+                    batch_data["q_attention_mask"] = q_attention_mask
+                    batch_data["q_position_ids"] = q_position_ids
+                    batch_data["a_input_ids"] = a_input_ids
+                    batch_data["a_token_type_ids"] = a_token_type_ids
+                    batch_data["a_attention_mask"] = a_attention_mask
+                    batch_data["a_position_ids"] = a_position_ids
                     batch_data["label"] = label
                     batch.append(batch_data)
                     batch_data = {}
-                    input_ids, token_type_ids, attention_mask, wn_concept_ids, nell_concept_ids, label = [], [], [], [], [], []
+                    q_input_ids, q_token_type_ids, q_attention_mask, q_position_ids, a_input_ids, a_token_type_ids, a_attention_mask, a_position_ids, label = [], [], [], [], [], [], [], [], []
             return batch
 
 
