@@ -17,22 +17,8 @@ def eval_model(model, predict_file_path, batch_predict_inputs):
     with torch.no_grad():  # 插在此处
         for i in tqdm(range(len(batch_predict_inputs))):
             inputs = batch_predict_inputs[i]
-            '''
-            batch_tokenized = tokenizer.batch_encode_plus(inputs, add_special_tokens=True,
-                                                          max_length=args.max_seq_len, padding='max_length',
-                                                          truncation=True)  # tokenize、add special token、pad
-            '''
-            input_ids = torch.tensor(inputs['input_ids'])
-            token_type_ids = torch.tensor(inputs['token_type_ids'])
-            attention_mask = torch.tensor(inputs['attention_mask'])
-
-            if torch.cuda.is_available():
-                input_ids = input_ids.cuda()
-                attention_mask = attention_mask.cuda()
-                token_type_ids = token_type_ids.cuda()
-
-            outputs = model(False, input_ids, token_type_ids, attention_mask)
-            all_preds.extend(outputs[:, 1])
+            outputs = model(inputs)
+            all_preds.extend(outputs)
 
     t_f = read_data_for_predict(predict_file_path)
     score = calc_map1(t_f, all_preds)

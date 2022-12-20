@@ -62,7 +62,7 @@ class InputFeatures(object):
 
 
 class Examples_To_Features_Converter(object):
-    def __init__(self, **concept_settings):
+    def __init__(self):
         pass
 
     def __call__(self,
@@ -73,16 +73,16 @@ class Examples_To_Features_Converter(object):
                  max_answer_length):
         for(example_idx, example) in enumerate(examples):
 
-            tokenization_info = self.all_tokenization_info[example.id]
+            #tokenization_info = self.all_tokenization_info[example.id]
 
             question_tokens = tokenizer.tokenize(example.question_text)
-            assert question_tokens == tokenization_info['question_subtokens']
+            #assert question_tokens == tokenization_info['question_subtokens']
 
             if len(question_tokens) > max_question_length:
                 question_tokens = question_tokens[0:max_question_length]
 
             answer_tokens = tokenizer.tokenize(example.answer_text)
-            assert answer_tokens == tokenization_info['answer_subtokens']
+            #assert answer_tokens == tokenization_info['answer_subtokens']
 
             if len(answer_tokens) > max_answer_length:
                 answer_tokens = answer_tokens[0:max_answer_length]
@@ -95,11 +95,11 @@ class Examples_To_Features_Converter(object):
             q_segment_ids.append(0)
 
             for token in  question_tokens:
-                tokens.append(token)
-                segment_ids.append(0)
+                q_tokens.append(token)
+                q_segment_ids.append(0)
 
-            tokens.append("[SEP]")
-            segment_ids.append(0)
+            q_tokens.append("[SEP]")
+            q_segment_ids.append(0)
 
             a_tokens = []
             a_segment_ids = []
@@ -108,23 +108,23 @@ class Examples_To_Features_Converter(object):
             a_segment_ids.append(0)
 
             for token in answer_tokens:
-                tokens.append(token)
-                segment_ids.append(0)
+                a_tokens.append(token)
+                a_segment_ids.append(0)
 
 
-            tokens.append("[SEP]")
-            segment_ids.append(0)
+            a_tokens.append("[SEP]")
+            a_segment_ids.append(0)
 
 
             q_input_mask = [1] * len(q_tokens)
             a_input_mask = [1] * len(a_tokens)
 
-            while len(q_tokens) < max_question_length:
+            while len(q_tokens) < max_question_length+2:
                 q_tokens.append("[PAD]")
                 q_segment_ids.append(0)
                 q_input_mask.append(0)
 
-            while len(a_tokens) < max_answer_length:
+            while len(a_tokens) < max_answer_length+2:
                 a_tokens.append("[PAD]")
                 a_segment_ids.append(0)
                 a_input_mask.append(0)
@@ -139,12 +139,12 @@ class Examples_To_Features_Converter(object):
                 q_input_ids=q_input_ids,
                 q_input_mask=q_input_mask,
                 q_segment_ids=q_segment_ids,
-                q_pos_ids=range(max_question_length),
-                a_tokens=q_tokens,
-                a_input_ids=q_input_ids,
-                a_input_mask=q_input_mask,
-                a_segment_ids=q_segment_ids,
-                a_pos_ids=range(max_answer_length),
+                q_pos_ids=range(max_question_length+2),
+                a_tokens=a_tokens,
+                a_input_ids=a_input_ids,
+                a_input_mask=a_input_mask,
+                a_segment_ids=a_segment_ids,
+                a_pos_ids=range(max_answer_length+2),
                 label=example.label)
 
             yield feature
@@ -175,11 +175,11 @@ def read_qas_examples(input_file):
 
 class DataProcessor(object):
     def __init__(self,
-                 do_lower_case,
+                 args,
                  max_seq_length,
                  max_question_length,
                  max_answer_length):
-        self._bert_tokenizer = BertTokenizer.from_pretrained('bert-base-uncased' if do_lower_case else 'bert-base-cased')
+        self._bert_tokenizer = BertTokenizer.from_pretrained(args.pre_trained_model)
         self.train_examples = None
         self.predict_examples = None
         self._max_seq_length = max_seq_length
@@ -190,8 +190,8 @@ class DataProcessor(object):
         examples = read_qas_examples(input_file=data_path)
         return examples
 
-    def get_features(self, examples, **concept_settings):
-        convert_examples_to_features = Examples_To_Features_Converter(**concept_settings)
+    def get_features(self, examples):
+        convert_examples_to_features = Examples_To_Features_Converter()
         features = convert_examples_to_features(
             examples=examples,
             tokenizer=self._bert_tokenizer,
@@ -199,7 +199,7 @@ class DataProcessor(object):
             max_question_length=self._max_question_length,
             max_answer_length=self._max_answer_length)
         return features
-    def data_generator(self, data_path, batch_size, phase, **concept_settings):
+    def data_generator(self, data_path, batch_size, phase):
 
         if phase == 'train':
             self.train_examples = self.get_examples(data_path)
@@ -245,9 +245,9 @@ class DataProcessor(object):
 
 
         if phase == 'train':
-            features = self.get_features(self.train_examples, **concept_settings)
+            features = self.get_features(self.train_examples)
         else:
-            features = self.get_features(self.predict_examples, **concept_settings)
+            features = self.get_features(self.predict_examples)
         
         return batch_reader(features,batch_size)
         
