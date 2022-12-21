@@ -92,28 +92,28 @@ class Examples_To_Features_Converter(object):
             q_segment_ids = []
 
             q_tokens.append("[CLS]")
-            q_segment_ids.append(0)
+            q_segment_ids.append(1)
 
             for token in  question_tokens:
                 q_tokens.append(token)
-                q_segment_ids.append(0)
+                q_segment_ids.append(1)
 
             q_tokens.append("[SEP]")
-            q_segment_ids.append(0)
+            q_segment_ids.append(1)
 
             a_tokens = []
             a_segment_ids = []
 
             a_tokens.append("[CLS]")
-            a_segment_ids.append(0)
+            a_segment_ids.append(1)
 
             for token in answer_tokens:
                 a_tokens.append(token)
-                a_segment_ids.append(0)
+                a_segment_ids.append(1)
 
 
             a_tokens.append("[SEP]")
-            a_segment_ids.append(0)
+            a_segment_ids.append(1)
 
 
             q_input_mask = [1] * len(q_tokens)
@@ -121,12 +121,12 @@ class Examples_To_Features_Converter(object):
 
             while len(q_tokens) < max_question_length+2:
                 q_tokens.append("[PAD]")
-                q_segment_ids.append(0)
+                q_segment_ids.append(1)
                 q_input_mask.append(0)
 
             while len(a_tokens) < max_answer_length+2:
                 a_tokens.append("[PAD]")
-                a_segment_ids.append(0)
+                a_segment_ids.append(1)
                 a_input_mask.append(0)
 
             q_input_ids = tokenizer.convert_tokens_to_ids(q_tokens)

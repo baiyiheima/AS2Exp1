@@ -13,7 +13,7 @@ class BertClassfication(nn.Module):
     def __init__(self,args):
         super(BertClassfication, self).__init__()
         self.model_name = args.pre_trained_model
-        self.pre_model = BertModel.from_pretrained(self.model_name)
+        self.pre_model = BertModel.from_pretrained(self.model_name,output_hidden_states = True)
         #self.tokenizer = BertTokenizer.from_pretrained(self.model_name)
         freeze(self.pre_model)
 
@@ -45,16 +45,26 @@ class BertClassfication(nn.Module):
             a_token_type_ids = a_token_type_ids.cuda()
             a_position_ids = a_position_ids.cuda()
 
-        q_hiden_outputs = self.pre_model(input_ids=q_input_ids, attention_mask=q_attention_mask,token_type_ids=q_token_type_ids,position_ids=q_position_ids)
-        q_outputs = q_hiden_outputs[0]  # [0]表示输出结果部分，[:,0,:]表示[CLS]对应的结果
+        self.pre_model.eval()
+        with torch.no_grad():
+            q_hiden_outputs = self.pre_model(q_input_ids, q_attention_mask)
+            a_hiden_outputs = self.pre_model(a_input_ids,a_attention_mask)
 
-        a_hiden_outputs = self.pre_model(input_ids=a_input_ids, attention_mask=a_attention_mask,
-                                     token_type_ids=a_token_type_ids, position_ids=a_position_ids)
-        a_outputs = a_hiden_outputs[0]  # [0]表示输出结果部分，[:,0,:]表示[CLS]对应的结果
+        q_outputs = q_hiden_outputs[2]  # [0]表示输出结果部分，[:,0,:]表示[CLS]对应的结果
+        a_outputs = a_hiden_outputs[2]  # [0]表示输出结果部分，[:,0,:]表示[CLS]对应的结果
 
-        reQ = self.representation(q_outputs)
-        reA = self.representation(a_outputs)
-        inQ,inA = self.interactive(q_outputs,a_outputs)
+        q_token_embeddings = torch.stack(q_outputs, dim=0)
+        q_token_embeddings = q_token_embeddings[-4:,:,:,:]
+        q_token_embeddings = torch.sum(q_token_embeddings,0)
+
+        a_token_embeddings = torch.stack(a_outputs, dim=0)
+        a_token_embeddings = a_token_embeddings[-4:, :, :, :]
+        a_token_embeddings = torch.sum(a_token_embeddings, 0)
+
+        reQ = self.representation(q_token_embeddings)
+        reA = self.representation(a_token_embeddings)
+        inQ,inA = self.interactive(q_token_embeddings,a_token_embeddings)
+
         encodeQ = torch.cat((reQ,inQ),2)
         encodeA = torch.cat((reA, inA), 2)
         final_feature_Q = torch.mean(encodeQ, 1)

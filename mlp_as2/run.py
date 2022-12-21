@@ -61,7 +61,7 @@ def train(args):
     if torch.cuda.is_available():
         model.cuda()
     #lossfuction = nn.CrossEntropyLoss()
-    lossfuction = nn.BCELoss()
+    lossfuction = nn.MSELoss()
     optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=args.learning_rate)
     epoch = args.epoch
     print_every_batch = 10
